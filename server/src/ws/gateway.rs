@@ -24,6 +24,7 @@ pub enum GatewayEvent {
         author_display_name: Option<String>,
         author_avatar_url: Option<String>,
         content: String,
+        attachments: Vec<crate::models::attachment::Attachment>,
         created_at: String,
     },
     MessageUpdate {
@@ -63,6 +64,18 @@ pub enum GatewayEvent {
     ChannelDelete {
         id: Uuid,
         server_id: Uuid,
+    },
+    RoleCreate {
+        server_id: Uuid,
+        role: crate::models::role::Role,
+    },
+    RoleUpdate {
+        server_id: Uuid,
+        role: crate::models::role::Role,
+    },
+    RoleDelete {
+        server_id: Uuid,
+        role_id: Uuid,
     },
 }
 

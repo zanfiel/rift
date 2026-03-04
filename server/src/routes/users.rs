@@ -159,7 +159,7 @@ pub async fn send_dm_message(
         return Err(AppError::Forbidden);
     }
 
-    let content = req.content.trim();
+    let content = req.content.as_deref().unwrap_or("").trim();
     if content.is_empty() {
         return Err(AppError::BadRequest("Message cannot be empty".into()));
     }

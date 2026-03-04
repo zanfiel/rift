@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MessageWithAuthor } from '../types';
+  import type { MessageWithAuthor, Attachment } from '../types';
   import { auth } from '../stores/auth';
   import { messages } from '../stores/messages';
 
@@ -18,6 +18,14 @@
   const displayName = $derived(message.author_display_name ?? message.author_username);
   const initial = $derived(message.author_username.charAt(0).toUpperCase());
 
+  let imageAttachments: Attachment[] = $derived.by(() => {
+    return (message.attachments ?? []).filter(a => a.content_type?.startsWith('image/'));
+  });
+
+  let fileAttachments: Attachment[] = $derived.by(() => {
+    return (message.attachments ?? []).filter(a => !a.content_type?.startsWith('image/'));
+  });
+
   function formatTime(iso: string): string {
     const d = new Date(iso);
     const now = new Date();
@@ -34,6 +42,13 @@
     }
     return d.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: 'numeric' }) +
       ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatSize(bytes: number | null): string {
+    if (bytes == null) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   function startEdit() {
@@ -114,9 +129,46 @@
         escape to <button class="btn-link" onclick={cancelEdit}>cancel</button> &middot; enter to <button class="btn-link" onclick={saveEdit}>save</button>
       </div>
     {:else}
-      <div class="content">{message.content}</div>
+      {#if message.content}
+        <div class="content">{message.content}</div>
+      {/if}
       {#if compact && message.edited_at}
         <span class="edited" title={formatTime(message.edited_at)}>(edited)</span>
+      {/if}
+
+      {#if imageAttachments.length > 0}
+        <div class="attachments-images">
+          {#each imageAttachments as att (att.id)}
+            <a href={att.url} target="_blank" rel="noopener" class="image-attachment">
+              <img src={att.url} alt={att.filename} loading="lazy" />
+            </a>
+          {/each}
+        </div>
+      {/if}
+
+      {#if fileAttachments.length > 0}
+        <div class="attachments-files">
+          {#each fileAttachments as att (att.id)}
+            <a href={att.url} download={att.filename} class="file-attachment">
+              <div class="file-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                </svg>
+              </div>
+              <div class="file-info">
+                <span class="file-name">{att.filename}</span>
+                <span class="file-size">{formatSize(att.size_bytes)}</span>
+              </div>
+              <div class="file-download">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </div>
+            </a>
+          {/each}
+        </div>
       {/if}
     {/if}
   </div>
@@ -277,5 +329,96 @@
   }
   .action-btn.danger:hover {
     color: var(--text-danger);
+  }
+
+  /* Attachment styles */
+  .attachments-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .image-attachment {
+    display: block;
+    max-width: 400px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .image-attachment img {
+    display: block;
+    max-width: 100%;
+    max-height: 350px;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+  }
+
+  .image-attachment:hover img {
+    opacity: 0.9;
+  }
+
+  .attachments-files {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .file-attachment {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    max-width: 400px;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .file-attachment:hover {
+    background: var(--bg-hover);
+  }
+
+  .file-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    display: flex;
+  }
+
+  .file-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .file-name {
+    font-size: 13px;
+    color: var(--text-link);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-size {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  .file-download {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    display: flex;
+  }
+
+  .file-attachment:hover .file-download {
+    color: var(--text-normal);
   }
 </style>

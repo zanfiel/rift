@@ -1,6 +1,7 @@
-pub mod user;
-pub mod server;
+pub mod attachment;
 pub mod channel;
 pub mod message;
-pub mod role;
 pub mod permissions;
+pub mod role;
+pub mod server;
+pub mod user;

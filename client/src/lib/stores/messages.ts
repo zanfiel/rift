@@ -74,12 +74,19 @@ export const messages = {
     notify();
   },
 
-  /** Send a message to the current channel */
-  async send(content: string): Promise<void> {
+  /** Send a message to the current channel (optionally with file attachments) */
+  async send(content: string, files?: File[]): Promise<void> {
     if (!_channelId) return;
     try {
-      // The server will broadcast MessageCreate via WS — we add it there
-      await api.sendMessage(_channelId, content);
+      let attachment_ids: string[] | undefined;
+      if (files && files.length > 0) {
+        const uploaded = await api.uploadFiles(files);
+        attachment_ids = uploaded.map(u => u.upload_id);
+      }
+      const text = content.trim() || undefined;
+      // Need either text or attachments
+      if (!text && (!attachment_ids || attachment_ids.length === 0)) return;
+      await api.sendMessage(_channelId, text, attachment_ids);
     } catch (e) {
       console.error('Failed to send message:', e);
       throw e;
@@ -133,6 +140,7 @@ export const messages = {
             author_username: d.author_username,
             author_display_name: d.author_display_name,
             author_avatar_url: d.author_avatar_url,
+            attachments: d.attachments ?? [],
           };
           _messages = [..._messages, msg];
           // Clear typing for this user

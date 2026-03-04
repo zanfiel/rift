@@ -9,8 +9,10 @@ import type {
   MemberWithUser,
   MessageWithAuthor,
   PublicUser,
+  Role,
   Server,
   ServerWithDetails,
+  UploadedFile,
 } from './types';
 
 class ApiError extends Error {
@@ -205,8 +207,8 @@ export function listMessages(channelId: string, opts?: { before?: string; after?
   return request<MessageWithAuthor[]>('GET', `/api/channels/${channelId}/messages${qs ? '?' + qs : ''}`);
 }
 
-export function sendMessage(channelId: string, content: string) {
-  return request<MessageWithAuthor>('POST', `/api/channels/${channelId}/messages`, { content });
+export function sendMessage(channelId: string, content?: string, attachment_ids?: string[]) {
+  return request<MessageWithAuthor>('POST', `/api/channels/${channelId}/messages`, { content, attachment_ids });
 }
 
 export function editMessage(channelId: string, messageId: string, content: string) {
@@ -255,4 +257,76 @@ export function listDmMessages(dmId: string, opts?: { before?: string; limit?: n
 
 export function sendDmMessage(dmId: string, content: string) {
   return request<DmMessage>('POST', `/api/dms/${dmId}/messages`, { content });
+}
+
+// ── Uploads ──
+
+export async function uploadFiles(files: File[]): Promise<UploadedFile[]> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append('file', file, file.name);
+  }
+
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    try {
+      await tryRefresh();
+      // Retry with new token
+      const newToken = getToken();
+      const retryHeaders: Record<string, string> = {};
+      if (newToken) retryHeaders['Authorization'] = `Bearer ${newToken}`;
+      const retry = await fetch('/api/upload', {
+        method: 'POST',
+        headers: retryHeaders,
+        body: formData,
+      });
+      if (!retry.ok) throw new ApiError(retry.status, 'Upload failed');
+      return retry.json();
+    } catch {
+      throw new ApiError(401, 'Session expired');
+    }
+  }
+
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const err = await res.json(); msg = err.error || msg; } catch {}
+    throw new ApiError(res.status, msg);
+  }
+
+  return res.json();
+}
+
+// ── Roles ──
+
+export function listRoles(serverId: string) {
+  return request<Role[]>('GET', `/api/servers/${serverId}/roles`);
+}
+
+export function createRole(serverId: string, data: { name: string; color?: number; permissions?: number }) {
+  return request<Role>('POST', `/api/servers/${serverId}/roles`, data);
+}
+
+export function updateRole(serverId: string, roleId: string, data: { name?: string; color?: number; permissions?: number; position?: number }) {
+  return request<Role>('PATCH', `/api/servers/${serverId}/roles/${roleId}`, data);
+}
+
+export function deleteRole(serverId: string, roleId: string) {
+  return request<void>('DELETE', `/api/servers/${serverId}/roles/${roleId}`);
+}
+
+export function assignRole(serverId: string, userId: string, roleId: string) {
+  return request<void>('PUT', `/api/servers/${serverId}/members/${userId}/roles/${roleId}`);
+}
+
+export function removeRole(serverId: string, userId: string, roleId: string) {
+  return request<void>('DELETE', `/api/servers/${serverId}/members/${userId}/roles/${roleId}`);
 }

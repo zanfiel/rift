@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::models::attachment::Attachment;
 use crate::models::channel::Channel;
 use crate::models::message::{MessageQuery, MessageWithAuthor};
 use crate::models::role::Role;
@@ -547,6 +548,59 @@ pub async fn delete_message(pool: &PgPool, message_id: Uuid) -> Result<(), sqlx:
 
 // ───── Roles ─────
 
+// ───── Attachments ─────
+
+pub async fn create_attachment(
+    pool: &PgPool,
+    message_id: Uuid,
+    filename: &str,
+    url: &str,
+    content_type: Option<&str>,
+    size_bytes: Option<i64>,
+) -> Result<Attachment, sqlx::Error> {
+    sqlx::query_as::<_, Attachment>(
+        r#"INSERT INTO attachments (message_id, filename, url, content_type, size_bytes)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *"#,
+    )
+    .bind(message_id)
+    .bind(filename)
+    .bind(url)
+    .bind(content_type)
+    .bind(size_bytes)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn get_attachments_for_message(
+    pool: &PgPool,
+    message_id: Uuid,
+) -> Result<Vec<Attachment>, sqlx::Error> {
+    sqlx::query_as::<_, Attachment>(
+        "SELECT * FROM attachments WHERE message_id = $1 ORDER BY created_at",
+    )
+    .bind(message_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn get_attachments_for_messages(
+    pool: &PgPool,
+    message_ids: &[Uuid],
+) -> Result<Vec<Attachment>, sqlx::Error> {
+    if message_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_as::<_, Attachment>(
+        "SELECT * FROM attachments WHERE message_id = ANY($1) ORDER BY created_at",
+    )
+    .bind(message_ids)
+    .fetch_all(pool)
+    .await
+}
+
+// ───── Roles (continued) ─────
+
 pub async fn create_role(
     pool: &PgPool,
     server_id: Uuid,
@@ -589,6 +643,13 @@ pub async fn create_default_role(
     .bind(perms::DEFAULT)
     .fetch_one(pool)
     .await
+}
+
+pub async fn get_role_by_id(pool: &PgPool, role_id: Uuid) -> Result<Option<Role>, sqlx::Error> {
+    sqlx::query_as::<_, Role>("SELECT * FROM roles WHERE id = $1")
+        .bind(role_id)
+        .fetch_optional(pool)
+        .await
 }
 
 pub async fn get_server_roles(pool: &PgPool, server_id: Uuid) -> Result<Vec<Role>, sqlx::Error> {

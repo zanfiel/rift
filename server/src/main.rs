@@ -5,11 +5,12 @@ use axum::{
     },
     http::Method,
     response::IntoResponse,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 mod auth;
@@ -21,6 +22,7 @@ mod routes;
 mod ws;
 
 use config::Config;
+use routes::upload::PendingUploads;
 use ws::gateway::Gateway;
 
 /// Shared application state
@@ -29,6 +31,7 @@ struct AppState {
     pool: sqlx::PgPool,
     config: Config,
     gateway: Gateway,
+    pending_uploads: PendingUploads,
 }
 
 // Implement FromRef for each piece of state so Axum extractors work
@@ -47,6 +50,12 @@ impl axum::extract::FromRef<AppState> for Config {
 impl axum::extract::FromRef<AppState> for Gateway {
     fn from_ref(state: &AppState) -> Self {
         state.gateway.clone()
+    }
+}
+
+impl axum::extract::FromRef<AppState> for PendingUploads {
+    fn from_ref(state: &AppState) -> Self {
+        state.pending_uploads.clone()
     }
 }
 
@@ -79,11 +88,15 @@ async fn main() {
         .expect("Failed to create upload dir");
 
     let gateway = Gateway::new();
+    let pending_uploads: PendingUploads = std::sync::Arc::new(dashmap::DashMap::new());
+
+    let upload_dir = config.upload_dir.clone();
 
     let state = AppState {
         pool,
         config: config.clone(),
         gateway,
+        pending_uploads,
     };
 
     let cors = CorsLayer::new()
@@ -135,6 +148,19 @@ async fn main() {
             delete(routes::servers::delete_invite),
         )
         .route("/api/invites/{code}/join", post(routes::servers::join_via_invite))
+        // Roles
+        .route(
+            "/api/servers/{server_id}/roles",
+            get(routes::roles::list_roles).post(routes::roles::create_role),
+        )
+        .route(
+            "/api/servers/{server_id}/roles/{role_id}",
+            patch(routes::roles::update_role).delete(routes::roles::delete_role),
+        )
+        .route(
+            "/api/servers/{server_id}/members/{user_id}/roles/{role_id}",
+            put(routes::roles::assign_role).delete(routes::roles::remove_role),
+        )
         // Channels
         .route(
             "/api/servers/{server_id}/channels",
@@ -153,11 +179,15 @@ async fn main() {
             "/api/channels/{channel_id}/messages/{message_id}",
             patch(routes::messages::edit_message).delete(routes::messages::delete_message),
         )
+        // File uploads
+        .route("/api/upload", post(routes::upload::upload_files))
         // DMs
         .route(
             "/api/dms/{dm_channel_id}/messages",
             get(routes::users::list_dm_messages).post(routes::users::send_dm_message),
         )
+        // Static file serving for uploads
+        .nest_service("/uploads", ServeDir::new(upload_dir))
         // WebSocket
         .route("/ws", get(ws_handler))
         // Middleware

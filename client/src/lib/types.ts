@@ -52,6 +52,24 @@ export interface Channel {
   created_at: string;
 }
 
+export interface Attachment {
+  id: string;
+  message_id: string;
+  filename: string;
+  url: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+}
+
+export interface UploadedFile {
+  upload_id: string;
+  filename: string;
+  url: string;
+  content_type: string | null;
+  size_bytes: number;
+}
+
 export interface Message {
   id: string;
   channel_id: string;
@@ -71,6 +89,7 @@ export interface MessageWithAuthor {
   author_username: string;
   author_display_name: string | null;
   author_avatar_url: string | null;
+  attachments: Attachment[];
 }
 
 export interface Member {
@@ -155,7 +174,8 @@ export type GatewayEvent =
   | { type: 'MessageCreate'; data: {
       id: string; channel_id: string; author_id: string;
       author_username: string; author_display_name: string | null;
-      author_avatar_url: string | null; content: string; created_at: string;
+      author_avatar_url: string | null; content: string;
+      attachments: Attachment[]; created_at: string;
     }}
   | { type: 'MessageUpdate'; data: { id: string; channel_id: string; content: string; edited_at: string } }
   | { type: 'MessageDelete'; data: { id: string; channel_id: string } }
@@ -164,7 +184,10 @@ export type GatewayEvent =
   | { type: 'MemberJoin'; data: { server_id: string; user_id: string; username: string } }
   | { type: 'MemberLeave'; data: { server_id: string; user_id: string } }
   | { type: 'ChannelCreate'; data: { id: string; server_id: string; name: string; channel_type: string } }
-  | { type: 'ChannelDelete'; data: { id: string; server_id: string } };
+  | { type: 'ChannelDelete'; data: { id: string; server_id: string } }
+  | { type: 'RoleCreate'; data: { server_id: string; role: Role } }
+  | { type: 'RoleUpdate'; data: { server_id: string; role: Role } }
+  | { type: 'RoleDelete'; data: { server_id: string; role_id: string } };
 
 export type GatewayCommand =
   | { type: 'Identify'; data: { token: string } }
