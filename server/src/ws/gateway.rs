@@ -4,6 +4,7 @@ use axum::extract::ws::{Message as WsMessage, WebSocket};
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -153,12 +154,13 @@ impl Gateway {
         &self,
         socket: WebSocket,
         jwt_secret: String,
+        pool: PgPool,
     ) {
         let (mut ws_tx, mut ws_rx) = socket.split();
         let gateway = self.clone();
 
         // Wait for Identify command
-        let session = loop {
+        let mut session = loop {
             match ws_rx.next().await {
                 Some(Ok(WsMessage::Text(text))) => {
                     if let Ok(cmd) = serde_json::from_str::<GatewayCommand>(&text) {
@@ -238,18 +240,48 @@ impl Gateway {
                                         }
                                     }
                                     GatewayCommand::Subscribe { server_ids } => {
-                                        // Subscribe to server + channel events
+                                        // Subscribe to server-wide events (member join/leave, channel create/delete)
                                         for server_id in &server_ids {
                                             let mut rx = gateway.subscribe_server(*server_id);
                                             let tx = internal_tx.clone();
+                                            let gw = gateway.clone();
+                                            let tx2 = internal_tx.clone();
                                             tokio::spawn(async move {
                                                 while let Ok(event) = rx.recv().await {
+                                                    // Auto-subscribe to newly created channels
+                                                    if let GatewayEvent::ChannelCreate { id: channel_id, .. } = &event {
+                                                        let mut chan_rx = gw.subscribe_channel(*channel_id);
+                                                        let chan_tx = tx2.clone();
+                                                        tokio::spawn(async move {
+                                                            while let Ok(ev) = chan_rx.recv().await {
+                                                                if chan_tx.send(ev).await.is_err() {
+                                                                    break;
+                                                                }
+                                                            }
+                                                        });
+                                                    }
                                                     if tx.send(event).await.is_err() {
                                                         break;
                                                     }
                                                 }
                                             });
+
+                                            // Subscribe to all existing channels in this server
+                                            if let Ok(channels) = crate::db::get_server_channels(&pool, *server_id).await {
+                                                for channel in channels {
+                                                    let mut chan_rx = gateway.subscribe_channel(channel.id);
+                                                    let chan_tx = internal_tx.clone();
+                                                    tokio::spawn(async move {
+                                                        while let Ok(event) = chan_rx.recv().await {
+                                                            if chan_tx.send(event).await.is_err() {
+                                                                break;
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            }
                                         }
+                                        session.subscribed_servers.extend(server_ids);
                                     }
                                     _ => {}
                                 }

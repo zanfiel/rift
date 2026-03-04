@@ -23,6 +23,7 @@ export interface PublicUser {
 
 export interface AuthResponse {
   token: string;
+  refresh_token: string;
   user: PublicUser;
 }
 

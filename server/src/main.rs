@@ -180,7 +180,8 @@ async fn ws_handler(
 ) -> impl IntoResponse {
     let jwt_secret = state.config.jwt_secret.clone();
     let gateway = state.gateway.clone();
+    let pool = state.pool.clone();
     ws.on_upgrade(move |socket| async move {
-        gateway.handle_connection(socket, jwt_secret).await;
+        gateway.handle_connection(socket, jwt_secret, pool).await;
     })
 }

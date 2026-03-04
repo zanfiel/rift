@@ -62,6 +62,7 @@ pub async fn register(
 
     Ok(Json(AuthResponse {
         token,
+        refresh_token: refresh,
         user: PublicUser::from(user),
     }))
 }
@@ -86,6 +87,7 @@ pub async fn login(
 
     Ok(Json(AuthResponse {
         token,
+        refresh_token: refresh,
         user: PublicUser::from(user),
     }))
 }
@@ -121,6 +123,7 @@ pub async fn refresh(
 
     Ok(Json(AuthResponse {
         token,
+        refresh_token: new_refresh,
         user: PublicUser::from(user),
     }))
 }

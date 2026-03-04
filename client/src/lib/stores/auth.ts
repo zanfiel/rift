@@ -11,6 +11,7 @@ type Subscriber = () => void;
 
 let _user: PublicUser | null = null;
 let _token: string | null = localStorage.getItem('token');
+let _refreshToken: string | null = localStorage.getItem('refresh_token');
 let _loading = true;
 let _error: string | null = null;
 const subs: Set<Subscriber> = new Set();
@@ -42,10 +43,23 @@ export const auth = {
       _user = await api.getMe();
       gateway.connect(_token);
     } catch {
-      // Token expired or invalid
-      localStorage.removeItem('token');
-      _token = null;
-      _user = null;
+      // Access token expired — the API layer will auto-refresh if a refresh token exists.
+      // If auto-refresh succeeded, the new token is already in localStorage.
+      const newToken = localStorage.getItem('token');
+      if (newToken && newToken !== _token) {
+        // Refresh worked — retry with new token
+        _token = newToken;
+        _refreshToken = localStorage.getItem('refresh_token');
+        try {
+          _user = await api.getMe();
+          gateway.connect(_token);
+        } catch {
+          // Still failing — clear everything
+          _clearSession();
+        }
+      } else {
+        _clearSession();
+      }
     }
     _loading = false;
     notify();
@@ -56,9 +70,7 @@ export const auth = {
     notify();
     try {
       const res = await api.login(username, password);
-      _token = res.token;
-      _user = res.user;
-      localStorage.setItem('token', res.token);
+      _setSession(res.token, res.refresh_token, res.user);
       gateway.connect(res.token);
       notify();
     } catch (e: any) {
@@ -73,9 +85,7 @@ export const auth = {
     notify();
     try {
       const res = await api.register(username, email, password, displayName);
-      _token = res.token;
-      _user = res.user;
-      localStorage.setItem('token', res.token);
+      _setSession(res.token, res.refresh_token, res.user);
       gateway.connect(res.token);
       notify();
     } catch (e: any) {
@@ -90,9 +100,7 @@ export const auth = {
       await api.logout();
     } catch { /* ignore */ }
     gateway.disconnect();
-    _token = null;
-    _user = null;
-    localStorage.removeItem('token');
+    _clearSession();
     notify();
   },
 
@@ -101,3 +109,19 @@ export const auth = {
     notify();
   },
 };
+
+function _setSession(token: string, refreshToken: string, user: PublicUser) {
+  _token = token;
+  _refreshToken = refreshToken;
+  _user = user;
+  localStorage.setItem('token', token);
+  localStorage.setItem('refresh_token', refreshToken);
+}
+
+function _clearSession() {
+  _token = null;
+  _refreshToken = null;
+  _user = null;
+  localStorage.removeItem('token');
+  localStorage.removeItem('refresh_token');
+}

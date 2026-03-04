@@ -26,10 +26,50 @@ function getToken(): string | null {
   return localStorage.getItem('token');
 }
 
+/** In-flight refresh promise to prevent concurrent refresh attempts */
+let refreshInFlight: Promise<AuthResponse> | null = null;
+
+/**
+ * Attempt to refresh the access token using the stored refresh token.
+ * Returns the new AuthResponse or throws on failure.
+ * Deduplicates concurrent calls.
+ */
+async function tryRefresh(): Promise<AuthResponse> {
+  if (refreshInFlight) return refreshInFlight;
+
+  const rt = localStorage.getItem('refresh_token');
+  if (!rt) throw new Error('No refresh token');
+
+  refreshInFlight = (async () => {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    if (!res.ok) {
+      // Refresh failed — clear everything
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      throw new ApiError(res.status, 'Session expired');
+    }
+    const data: AuthResponse = await res.json();
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('refresh_token', data.refresh_token);
+    return data;
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  _isRetry = false,
 ): Promise<T> {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -45,6 +85,17 @@ async function request<T>(
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  // Auto-refresh on 401 (but not for auth endpoints themselves, and not on retry)
+  if (res.status === 401 && !_isRetry && !path.includes('/auth/')) {
+    try {
+      await tryRefresh();
+      // Retry the original request with the new token
+      return request<T>(method, path, body, true);
+    } catch {
+      // Refresh also failed — propagate 401
+    }
+  }
 
   if (!res.ok) {
     let msg = res.statusText;
