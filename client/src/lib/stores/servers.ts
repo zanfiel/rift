@@ -1,6 +1,6 @@
 // ── Server store — manages server list, selected server/channel, members ──
 
-import type { Server, ServerWithDetails, Channel, MemberWithUser } from '../types';
+import type { Server, ServerWithDetails, Channel, MemberWithUser, Role } from '../types';
 import * as api from '../api';
 import { gateway } from '../gateway';
 
@@ -164,6 +164,39 @@ export const servers = {
         const d = event.data;
         if (_currentServer && d.server_id === _currentServer.server.id) {
           _members = _members.filter(m => m.user_id !== d.user_id);
+          notify();
+        }
+        break;
+      }
+      case 'RoleCreate': {
+        const d = event.data;
+        if (_currentServer && d.server_id === _currentServer.server.id) {
+          _currentServer = {
+            ..._currentServer,
+            roles: [..._currentServer.roles, d.role],
+          };
+          notify();
+        }
+        break;
+      }
+      case 'RoleUpdate': {
+        const d = event.data;
+        if (_currentServer && d.server_id === _currentServer.server.id) {
+          _currentServer = {
+            ..._currentServer,
+            roles: _currentServer.roles.map(r => r.id === d.role.id ? d.role : r),
+          };
+          notify();
+        }
+        break;
+      }
+      case 'RoleDelete': {
+        const d = event.data;
+        if (_currentServer && d.server_id === _currentServer.server.id) {
+          _currentServer = {
+            ..._currentServer,
+            roles: _currentServer.roles.filter(r => r.id !== d.role_id),
+          };
           notify();
         }
         break;

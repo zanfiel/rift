@@ -53,16 +53,20 @@
   // Gateway event dispatch — route events to the right stores
   $effect(() => {
     const unsub = gateway.on((event: GatewayEvent) => {
+      const t: string = event.type;
+
       // Message-related events
-      if (event.type === 'MessageCreate' || event.type === 'MessageUpdate' ||
-          event.type === 'MessageDelete' || event.type === 'TypingStart') {
+      if (t === 'MessageCreate' || t === 'MessageUpdate' ||
+          t === 'MessageDelete' || t === 'TypingStart') {
         messages.handleEvent(event);
       }
 
       // Server-related events
-      if (event.type === 'ChannelCreate' || event.type === 'ChannelDelete' ||
-          event.type === 'MemberJoin' || event.type === 'MemberLeave') {
-        servers.handleEvent(event);
+      if (t === 'ChannelCreate' || t === 'ChannelDelete' ||
+          t === 'MemberJoin' || t === 'MemberLeave' ||
+          t === 'RoleCreate' || t === 'RoleUpdate' ||
+          t === 'RoleDelete') {
+        servers.handleEvent({ type: t, data: (event as any).data });
       }
     });
     return unsub;

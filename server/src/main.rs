@@ -161,6 +161,10 @@ async fn main() {
             "/api/servers/{server_id}/members/{user_id}/roles/{role_id}",
             put(routes::roles::assign_role).delete(routes::roles::remove_role),
         )
+        .route(
+            "/api/servers/{server_id}/members/{user_id}/roles",
+            get(routes::roles::get_member_roles),
+        )
         // Channels
         .route(
             "/api/servers/{server_id}/channels",

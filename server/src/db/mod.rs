@@ -712,6 +712,21 @@ pub async fn assign_role(
     Ok(())
 }
 
+pub async fn get_member_role_ids(
+    pool: &PgPool,
+    server_id: Uuid,
+    user_id: Uuid,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        "SELECT role_id FROM member_roles WHERE server_id = $1 AND user_id = $2",
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| r.0).collect())
+}
+
 pub async fn remove_role_from_member(
     pool: &PgPool,
     server_id: Uuid,

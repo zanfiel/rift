@@ -323,6 +323,10 @@ export function deleteRole(serverId: string, roleId: string) {
   return request<void>('DELETE', `/api/servers/${serverId}/roles/${roleId}`);
 }
 
+export function getMemberRoles(serverId: string, userId: string) {
+  return request<string[]>('GET', `/api/servers/${serverId}/members/${userId}/roles`);
+}
+
 export function assignRole(serverId: string, userId: string, roleId: string) {
   return request<void>('PUT', `/api/servers/${serverId}/members/${userId}/roles/${roleId}`);
 }

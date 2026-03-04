@@ -157,6 +157,18 @@ pub async fn delete_role(
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+/// GET /api/servers/{server_id}/members/{user_id}/roles
+pub async fn get_member_roles(
+    State(pool): State<PgPool>,
+    auth: AuthUser,
+    Path((server_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Vec<Uuid>>, AppError> {
+    require_member(&pool, server_id, auth.user_id).await?;
+    require_member(&pool, server_id, user_id).await?;
+    let role_ids = db::get_member_role_ids(&pool, server_id, user_id).await?;
+    Ok(Json(role_ids))
+}
+
 /// PUT /api/servers/{server_id}/members/{user_id}/roles/{role_id}
 pub async fn assign_role(
     State(pool): State<PgPool>,
