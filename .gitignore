@@ -1,0 +1,25 @@
+# Rust
+/server/target/
+**/*.rs.bk
+
+# Environment
+.env
+.env.*
+
+# Uploads
+/server/uploads/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (for future frontend)
+node_modules/
+dist/
+.svelte-kit/
