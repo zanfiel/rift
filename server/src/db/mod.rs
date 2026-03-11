@@ -79,6 +79,32 @@ pub async fn update_user_profile(
     .await
 }
 
+pub async fn update_user_email(
+    pool: &PgPool,
+    user_id: Uuid,
+    email: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET email = $2, updated_at = NOW() WHERE id = $1")
+        .bind(user_id)
+        .bind(email)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_user_password(
+    pool: &PgPool,
+    user_id: Uuid,
+    password_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1")
+        .bind(user_id)
+        .bind(password_hash)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn update_user_status(
     pool: &PgPool,
     user_id: Uuid,

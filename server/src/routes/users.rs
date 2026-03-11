@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -7,6 +7,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
+use crate::config::Config;
 use crate::db;
 use crate::error::AppError;
 use crate::models::user::PublicUser;
@@ -15,6 +16,7 @@ use crate::models::user::PublicUser;
 pub struct UpdateProfileRequest {
     pub display_name: Option<String>,
     pub about: Option<String>,
+    pub email: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -45,6 +47,19 @@ pub async fn update_me(
     auth: AuthUser,
     Json(req): Json<UpdateProfileRequest>,
 ) -> Result<Json<UserProfile>, AppError> {
+    // If email is being changed, validate and check uniqueness
+    if let Some(ref email) = req.email {
+        if !email.contains('@') {
+            return Err(AppError::BadRequest("Invalid email".into()));
+        }
+        if let Some(existing) = db::get_user_by_email(&pool, email).await? {
+            if existing.id != auth.user_id {
+                return Err(AppError::Conflict("Email already registered".into()));
+            }
+        }
+        db::update_user_email(&pool, auth.user_id, email).await?;
+    }
+
     let user = db::update_user_profile(
         &pool,
         auth.user_id,
@@ -58,6 +73,131 @@ pub async fn update_me(
         email: Some(user.email.clone()),
         user: PublicUser::from(user),
     }))
+}
+
+/// POST /api/users/@me/avatar — upload a new avatar image
+pub async fn upload_avatar(
+    State(pool): State<PgPool>,
+    State(config): State<Config>,
+    auth: AuthUser,
+    mut multipart: Multipart,
+) -> Result<Json<UserProfile>, AppError> {
+    let field = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(format!("Multipart error: {e}")))?
+        .ok_or_else(|| AppError::BadRequest("No file uploaded".into()))?;
+
+    let content_type = field.content_type().map(|s| s.to_string());
+
+    // Validate it's an image
+    if let Some(ref ct) = content_type {
+        if !ct.starts_with("image/") {
+            return Err(AppError::BadRequest("File must be an image".into()));
+        }
+    }
+
+    let data = field
+        .bytes()
+        .await
+        .map_err(|e| AppError::BadRequest(format!("Failed to read file: {e}")))?;
+
+    // Limit avatar to 5MB
+    if data.len() > 5 * 1024 * 1024 {
+        return Err(AppError::BadRequest("Avatar too large (max 5MB)".into()));
+    }
+
+    if data.is_empty() {
+        return Err(AppError::BadRequest("Empty file".into()));
+    }
+
+    // Determine extension from content type
+    let ext = match content_type.as_deref() {
+        Some("image/png") => "png",
+        Some("image/gif") => "gif",
+        Some("image/webp") => "webp",
+        _ => "jpg",
+    };
+
+    // Create avatars subdirectory
+    let avatar_dir = std::path::Path::new(&config.upload_dir).join("avatars");
+    tokio::fs::create_dir_all(&avatar_dir)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to create avatar dir: {e}")))?;
+
+    // Use user ID as filename so each user has exactly one avatar file
+    let filename = format!("{}.{ext}", auth.user_id);
+    let file_path = avatar_dir.join(&filename);
+    tokio::fs::write(&file_path, &data)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to save avatar: {e}")))?;
+
+    // Add cache-busting timestamp to URL
+    let ts = chrono::Utc::now().timestamp();
+    let avatar_url = format!("/uploads/avatars/{filename}?t={ts}");
+
+    let user = db::update_user_profile(&pool, auth.user_id, None, None, Some(&avatar_url)).await?;
+
+    Ok(Json(UserProfile {
+        email: Some(user.email.clone()),
+        user: PublicUser::from(user),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+/// POST /api/users/@me/password — change password
+pub async fn change_password(
+    State(pool): State<PgPool>,
+    auth: AuthUser,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if req.new_password.len() < 8 {
+        return Err(AppError::BadRequest(
+            "New password must be at least 8 characters".into(),
+        ));
+    }
+
+    let user = db::get_user_by_id(&pool, auth.user_id)
+        .await?
+        .ok_or(AppError::NotFound("User not found".into()))?;
+
+    // Verify current password
+    verify_password(&req.current_password, &user.password_hash)?;
+
+    // Hash new password
+    let new_hash = hash_password(&req.new_password)?;
+    db::update_user_password(&pool, auth.user_id, &new_hash).await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── Password helpers ──
+
+fn hash_password(password: &str) -> Result<String, AppError> {
+    use argon2::{
+        password_hash::{rand_core::OsRng, SaltString},
+        Argon2, PasswordHasher,
+    };
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map(|h| h.to_string())
+        .map_err(|e| AppError::Internal(format!("Password hash error: {e}")))
+}
+
+fn verify_password(password: &str, hash: &str) -> Result<(), AppError> {
+    use argon2::{password_hash::PasswordHash, Argon2, PasswordVerifier};
+    let parsed =
+        PasswordHash::new(hash).map_err(|e| AppError::Internal(format!("Invalid hash: {e}")))?;
+    Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .map_err(|_| AppError::Unauthorized)
 }
 
 /// GET /api/users/:user_id

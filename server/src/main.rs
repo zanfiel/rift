@@ -66,7 +66,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "zanverse_server=debug,tower_http=info".into()),
+                .unwrap_or_else(|_| "rift_server=debug,tower_http=info".into()),
         )
         .init();
 
@@ -118,6 +118,8 @@ async fn main() {
         .route("/api/auth/logout", post(routes::auth::logout))
         // Users
         .route("/api/users/@me", get(routes::users::get_me).patch(routes::users::update_me))
+        .route("/api/users/@me/avatar", post(routes::users::upload_avatar))
+        .route("/api/users/@me/password", post(routes::users::change_password))
         .route("/api/users/@me/dms", get(routes::users::list_dms).post(routes::users::create_dm))
         .route("/api/users/{user_id}", get(routes::users::get_user))
         // Servers

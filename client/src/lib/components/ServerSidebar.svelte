@@ -2,12 +2,21 @@
   import { servers } from '../stores/servers';
   import { ui } from '../stores/ui';
   import { auth } from '../stores/auth';
+  import type { PublicUser } from '../types';
 
   let serverList: typeof servers.list = $state([]);
+  let currentUser: PublicUser | null = $state(null);
 
   $effect(() => {
     const unsub = servers.subscribe(() => {
       serverList = servers.list;
+    });
+    return unsub;
+  });
+
+  $effect(() => {
+    const unsub = auth.subscribe(() => {
+      currentUser = auth.user;
     });
     return unsub;
   });
@@ -26,6 +35,14 @@
 
   function switchToDms() {
     ui.setView('dms');
+  }
+
+  function openUserSettings() {
+    ui.openModal('user-settings');
+  }
+
+  function getInitial(user: PublicUser): string {
+    return (user.display_name ?? user.username).charAt(0).toUpperCase();
   }
 </script>
 
@@ -78,6 +95,28 @@
       </svg>
     </button>
   </div>
+
+  <!-- Spacer pushes user bar to bottom -->
+  <div class="spacer"></div>
+
+  <!-- User bar -->
+  {#if currentUser}
+    <div class="user-bar" title="{currentUser.display_name ?? currentUser.username}">
+      <div class="user-avatar">
+        {#if currentUser.avatar_url}
+          <img src={currentUser.avatar_url} alt="Avatar" />
+        {:else}
+          <span>{getInitial(currentUser)}</span>
+        {/if}
+      </div>
+      <button class="settings-btn" onclick={openUserSettings} aria-label="User Settings" title="User Settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 10a2 2 0 100-4 2 2 0 000 4z"/>
+          <path fill-rule="evenodd" d="M6.143 1.31a.75.75 0 01.736-.61h2.242a.75.75 0 01.736.61l.27 1.355a5.484 5.484 0 011.072.62l1.31-.44a.75.75 0 01.874.344l1.122 1.942a.75.75 0 01-.14.953l-1.04.916a5.56 5.56 0 010 1.24l1.04.916a.75.75 0 01.14.953l-1.122 1.942a.75.75 0 01-.874.344l-1.31-.44a5.484 5.484 0 01-1.072.62l-.27 1.355a.75.75 0 01-.736.61H6.879a.75.75 0 01-.736-.61l-.27-1.355a5.484 5.484 0 01-1.072-.62l-1.31.44a.75.75 0 01-.874-.344L1.495 11.9a.75.75 0 01.14-.953l1.04-.916a5.56 5.56 0 010-1.24l-1.04-.916a.75.75 0 01-.14-.953l1.122-1.942a.75.75 0 01.874-.344l1.31.44a5.484 5.484 0 011.072-.62l.27-1.355zM8 11a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -176,5 +215,59 @@
     background: var(--border-subtle);
     border-radius: 1px;
     margin: 4px 0;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  /* ── User bar ── */
+
+  .user-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding-top: 4px;
+    border-top: 2px solid var(--border-subtle);
+    width: 48px;
+  }
+
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-white);
+  }
+
+  .user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .settings-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color var(--transition), background var(--transition);
+  }
+
+  .settings-btn:hover {
+    color: var(--text-normal);
+    background: var(--bg-hover);
   }
 </style>

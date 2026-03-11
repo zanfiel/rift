@@ -19,6 +19,7 @@ export interface PublicUser {
   avatar_url: string | null;
   status: string;
   about: string | null;
+  email?: string; // included when viewing own profile (@me endpoints)
 }
 
 export interface AuthResponse {

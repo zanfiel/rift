@@ -3,7 +3,7 @@
 type Subscriber = () => void;
 
 export type View = 'servers' | 'dms';
-export type Modal = 'create-server' | 'create-channel' | 'invite' | 'settings' | 'join-server' | null;
+export type Modal = 'create-server' | 'create-channel' | 'invite' | 'settings' | 'join-server' | 'user-settings' | null;
 
 let _view: View = 'servers';
 let _modal: Modal = null;

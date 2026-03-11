@@ -108,6 +108,14 @@ export const auth = {
     _error = null;
     notify();
   },
+
+  /** Update the cached user object (e.g. after profile edit) */
+  updateUser(updates: Partial<PublicUser>): void {
+    if (_user) {
+      _user = { ..._user, ...updates };
+      notify();
+    }
+  },
 };
 
 function _setSession(token: string, refreshToken: string, user: PublicUser) {

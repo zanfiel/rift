@@ -138,8 +138,53 @@ export function getMe() {
   return request<PublicUser>('GET', '/api/users/@me');
 }
 
-export function updateMe(data: { display_name?: string; about?: string }) {
+export function updateMe(data: { display_name?: string; about?: string; email?: string }) {
   return request<PublicUser>('PATCH', '/api/users/@me', data);
+}
+
+export async function uploadAvatar(file: File): Promise<PublicUser> {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch('/api/users/@me/avatar', {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    try {
+      await tryRefresh();
+      const newToken = getToken();
+      const retryHeaders: Record<string, string> = {};
+      if (newToken) retryHeaders['Authorization'] = `Bearer ${newToken}`;
+      const retry = await fetch('/api/users/@me/avatar', {
+        method: 'POST',
+        headers: retryHeaders,
+        body: formData,
+      });
+      if (!retry.ok) throw new ApiError(retry.status, 'Avatar upload failed');
+      return retry.json();
+    } catch {
+      throw new ApiError(401, 'Session expired');
+    }
+  }
+
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const err = await res.json(); msg = err.error || msg; } catch {}
+    throw new ApiError(res.status, msg);
+  }
+
+  return res.json();
+}
+
+export function changePassword(current_password: string, new_password: string) {
+  return request<{ ok: boolean }>('POST', '/api/users/@me/password', { current_password, new_password });
 }
 
 export function getUser(userId: string) {

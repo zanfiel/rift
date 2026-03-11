@@ -1,5 +1,5 @@
 {
-  "name": "client",
+  "name": "rift-client",
   "private": true,
   "version": "0.0.0",
   "type": "module",

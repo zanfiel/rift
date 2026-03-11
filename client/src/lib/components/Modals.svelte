@@ -4,6 +4,7 @@
   import * as api from '../api';
   import type { Invite, Role } from '../types';
   import { Permissions, hasPermission } from '../types';
+  import UserSettings from './UserSettings.svelte';
 
   let modal: typeof ui.modal = $state(null);
 
@@ -548,6 +549,10 @@
       </div>
     {/if}
   </div>
+{/if}
+
+{#if modal === 'user-settings'}
+  <UserSettings />
 {/if}
 
 <style>
